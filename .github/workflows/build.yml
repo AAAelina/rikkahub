@@ -5,11 +5,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 17 }
       - uses: android-actions/setup-android@v3
       - run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
-      - run: chmod +x gradlew && ./gradlew assembleRelease -x :web:installWebUiDeps -x :web:buildWebUi -x :material3:compileReleaseKotlin
+      - run: chmod +x gradlew && ./gradlew assembleRelease -x :web:installWebUiDeps -x :web:buildWebUi
       - uses: actions/upload-artifact@v4
         with:
           name: rikkahub-custom
