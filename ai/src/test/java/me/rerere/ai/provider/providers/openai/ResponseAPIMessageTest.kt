@@ -45,10 +45,11 @@ class ResponseAPIMessageTest {
 
     private fun invokeBuildRequestBody(
         providerSetting: ProviderSetting.OpenAI,
+        messages: List<UIMessage>,
         params: TextGenerationParams,
         stream: Boolean = false
     ): JsonObject {
-        return api.buildRequestBody(providerSetting, listOf(UIMessage.user("hello")), params, stream)
+        return api.buildRequestBody(providerSetting, messages, params, stream)
     }
 
     private fun createReasoningParams(reasoningLevel: ReasoningLevel = ReasoningLevel.OFF): TextGenerationParams {
@@ -316,6 +317,7 @@ class ResponseAPIMessageTest {
         )
         val requestBody = invokeBuildRequestBody(
             providerSetting = providerSetting,
+            messages = listOf(UIMessage.user("hello")),
             params = createReasoningParams()
         )
 
@@ -331,6 +333,7 @@ class ResponseAPIMessageTest {
         )
         val requestBody = invokeBuildRequestBody(
             providerSetting = providerSetting,
+            messages = listOf(UIMessage.user("hello")),
             params = createReasoningParams()
         )
 
@@ -346,12 +349,71 @@ class ResponseAPIMessageTest {
         )
         val requestBody = invokeBuildRequestBody(
             providerSetting = providerSetting,
+            messages = listOf(UIMessage.user("hello")),
             params = createReasoningParams(reasoningLevel = ReasoningLevel.LOW)
         )
 
         val reasoning = requestBody["reasoning"]?.jsonObject
         assertTrue("reasoning should exist", reasoning != null)
         assertEquals("low", reasoning!!["effort"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `system prompt text should be serialized into Response API instructions`() {
+        val prompt = "Assistant prompt\n\nTool guidance"
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = ProviderSetting.OpenAI(),
+            messages = listOf(
+                UIMessage.system(prompt),
+                UIMessage.user("hello")
+            ),
+            params = createReasoningParams()
+        )
+
+        assertEquals(prompt, requestBody["instructions"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `response api should encode image input`() {
+        val result = invokeBuildMessages(
+            listOf(
+                UIMessage(
+                    role = MessageRole.USER,
+                    parts = listOf(
+                        UIMessagePart.Text("Describe this image"),
+                        UIMessagePart.Image("data:image/png;base64,AA=="),
+                    )
+                )
+            )
+        )
+
+        val content = result.single().jsonObject["content"]!!.jsonArray
+        val image = content.first { it.jsonObject["type"]?.jsonPrimitive?.content == "input_image" }
+        assertEquals(
+            "data:image/png;base64,AA==",
+            image.jsonObject["image_url"]?.jsonPrimitive?.content,
+        )
+    }
+
+    @Test
+    fun `response api should map all adjustable reasoning budgets`() {
+        listOf(
+            ReasoningLevel.LOW to "low",
+            ReasoningLevel.MEDIUM to "medium",
+            ReasoningLevel.HIGH to "high",
+            ReasoningLevel.XHIGH to "xhigh",
+        ).forEach { (level, expected) ->
+            val requestBody = invokeBuildRequestBody(
+                providerSetting = ProviderSetting.OpenAI(baseUrl = "https://api.openai.com/v1"),
+                messages = emptyList(),
+                params = createReasoningParams(reasoningLevel = level),
+            )
+
+            assertEquals(
+                expected,
+                requestBody["reasoning"]?.jsonObject?.get("effort")?.jsonPrimitive?.content,
+            )
+        }
     }
 
     // ==================== Helper Functions ====================

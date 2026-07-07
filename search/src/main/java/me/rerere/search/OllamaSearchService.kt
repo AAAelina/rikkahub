@@ -44,16 +44,7 @@ object OllamaSearchService : SearchService<SearchServiceOptions.OllamaOptions> {
             required = listOf("query")
         )
 
-    override fun scrapingParameters(options: SearchServiceOptions.OllamaOptions): InputSchema? =
-        InputSchema.Obj(
-            properties = buildJsonObject {
-                put("url", buildJsonObject {
-                    put("type", "string")
-                    put("description", "url to scrape")
-                })
-            },
-            required = listOf("url")
-        )
+    override fun scrapingParameters(options: SearchServiceOptions.OllamaOptions): InputSchema? = null
 
     override suspend fun search(
         params: JsonObject,
@@ -100,40 +91,8 @@ object OllamaSearchService : SearchService<SearchServiceOptions.OllamaOptions> {
         params: JsonObject,
         commonOptions: SearchCommonOptions,
         serviceOptions: SearchServiceOptions.OllamaOptions
-    ): Result<ScrapedResult> = withContext(Dispatchers.IO) {
-        runCatching {
-            val url = params["url"]?.jsonPrimitive?.content ?: error("url is required")
-
-            val body = buildJsonObject {
-                put("url", url)
-            }
-
-            val request = Request.Builder()
-                .url("https://ollama.com/api/web_fetch")
-                .post(body.toString().toRequestBody("application/json".toMediaType()))
-                .addHeader("Authorization", "Bearer ${serviceOptions.apiKey}")
-                .build()
-
-            val response = httpClient.newCall(request).await()
-            if (!response.isSuccessful) {
-                error("response failed for url $url #${response.code}")
-            }
-            val responseData = response.body.string().let {
-                json.decodeFromString<OllamaScrapeResponse>(it)
-            }
-
-            ScrapedResult(
-                urls = listOf(
-                    ScrapedResultUrl(
-                        url = url,
-                        content = responseData.content,
-                        metadata = ScrapedResultMetadata(
-                            title = responseData.title
-                        )
-                    )
-                )
-            )
-        }
+    ): Result<ScrapedResult> {
+        return Result.failure(Exception("Scraping is not supported for Ollama"))
     }
 
     @Serializable
@@ -146,12 +105,5 @@ object OllamaSearchService : SearchService<SearchServiceOptions.OllamaOptions> {
         val title: String,
         val url: String,
         val content: String
-    )
-
-    @Serializable
-    private data class OllamaScrapeResponse(
-        val title: String,
-        val content: String,
-        val links: List<String>
     )
 }

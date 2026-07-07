@@ -95,7 +95,7 @@ class ResponseAPI(
             throw Exception("Failed to get response: ${response.code} ${response.body.string()}")
         }
 
-        val bodyStr = response.body?.string() ?: ""
+        val bodyStr = response.body.string()
         Log.i(TAG, "generateText: $bodyStr")
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
         val output = parseResponseOutput(bodyJson)
@@ -152,20 +152,18 @@ class ResponseAPI(
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
                 var exception = t
 
-                t?.printStackTrace()
-                println("[onFailure] 发生错误: ${t?.javaClass?.name} ${t?.message} / $response")
+                Log.w(TAG, "onFailure: ${t?.javaClass?.name} ${t?.message} / $response", t)
 
                 val bodyRaw = response?.body?.stringSafe()
                 try {
                     if (!bodyRaw.isNullOrBlank()) {
                         val bodyElement = Json.parseToJsonElement(bodyRaw)
-                        println(bodyElement)
+                        Log.d(TAG, "onFailure: error body $bodyElement")
                         exception = bodyElement.parseErrorDetail()
                         Log.i(TAG, "onFailure: $exception")
                     }
                 } catch (e: Throwable) {
-                    Log.w(TAG, "onFailure: failed to parse from $bodyRaw")
-                    e.printStackTrace()
+                    Log.w(TAG, "onFailure: failed to parse from $bodyRaw", e)
                 } finally {
                     close(exception)
                 }
@@ -184,6 +182,13 @@ class ResponseAPI(
             eventSource.cancel()
         }
     }
+
+    fun createRequestBody(
+        providerSetting: ProviderSetting.OpenAI,
+        messages: List<UIMessage>,
+        params: TextGenerationParams,
+        stream: Boolean
+    ): JsonObject = buildRequestBody(providerSetting, messages, params, stream)
 
     internal fun buildRequestBody(
         providerSetting: ProviderSetting.OpenAI,
@@ -277,7 +282,7 @@ class ResponseAPI(
         }.mergeCustomBody(params.customBody)
     }
 
-    internal fun buildMessages(messages: List<UIMessage>) = buildJsonArray {
+    fun buildMessages(messages: List<UIMessage>) = buildJsonArray {
         messages
             .filter { it.isValidToUpload() && it.role != MessageRole.SYSTEM }
             .forEach { message ->
@@ -353,8 +358,7 @@ class ResponseAPI(
                             put("type", "function_call")
                             put("call_id", tool.toolCallId)
                             put("name", tool.toolName)
-                            // 使用 inputAsJson() 归一化，避免流式中断导致的残缺 JSON 被发送
-                            put("arguments", tool.inputAsJson().toString())
+                            put("arguments", tool.input)
                         })
                         add(buildJsonObject {
                             put("type", "function_call_output")
@@ -390,6 +394,20 @@ class ResponseAPI(
                                 )
                             }
                         })
+                        // Image lift: function_call_output is text-only, so a tool that
+                        // returns UIMessagePart.Image (take_screenshot, take_photo, etc.)
+                        // would otherwise be invisible to vision-capable models. Inject
+                        // those images as a follow-up user content item.
+                        val toolImages = tool.output.filterIsInstance<UIMessagePart.Image>()
+                        if (toolImages.isNotEmpty()) {
+                            addContentItem(
+                                MessageRole.USER,
+                                buildList {
+                                    add(UIMessagePart.Text("[Tool ${tool.toolName} produced the image(s) below.]"))
+                                    addAll(toolImages)
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -433,7 +451,7 @@ class ResponseAPI(
                                         put("type", "input_image")
                                         put("image_url", encodedImage.base64)
                                     }.onFailure {
-                                        it.printStackTrace()
+                                        Log.w(TAG, "failed to encode image to base64", it)
                                         put("type", "input_text")
                                         put("text", "Error: Failed to encode image to base64")
                                     }
@@ -448,7 +466,7 @@ class ResponseAPI(
         })
     }
 
-    private fun parseResponseDelta(jsonObject: JsonObject): MessageChunk? {
+    fun parseResponseDelta(jsonObject: JsonObject): MessageChunk? {
         val chunkType = jsonObject["type"]?.jsonPrimitive?.content ?: error("chunk type not found")
 
         when (chunkType) {
@@ -663,7 +681,7 @@ class ResponseAPI(
         return null
     }
 
-    private fun parseResponseOutput(jsonObject: JsonObject): MessageChunk {
+    fun parseResponseOutput(jsonObject: JsonObject): MessageChunk {
         println(jsonObject)
         val outputs = jsonObject["output"]?.jsonArray ?: error("output not found")
         val parts = arrayListOf<UIMessagePart>()
@@ -782,4 +800,3 @@ internal fun resolveResponseProviderCapabilities(host: String): ResponseProvider
         else -> ResponseProviderCapabilities()
     }
 }
-

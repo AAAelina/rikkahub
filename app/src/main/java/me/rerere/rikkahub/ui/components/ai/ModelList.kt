@@ -617,6 +617,7 @@ private fun ColumnScope.ModelList(
     val providerBadgeListState = rememberLazyListState()
     LaunchedEffect(lazyListState) {
         // 当LazyColumn滚动时，LazyRow也跟随滚动
+        @OptIn(kotlinx.coroutines.FlowPreview::class)
         snapshotFlow { lazyListState.firstVisibleItemIndex }
             .distinctUntilChanged()
             .debounce(100) // 防抖处理
@@ -643,7 +644,7 @@ private fun ColumnScope.ModelList(
             contentPadding = PaddingValues(horizontal = 8.dp),
             state = providerBadgeListState
         ) {
-            items(providers) { provider ->
+            items(providers, key = { it.id }) { provider ->
                 AssistChip(
                     onClick = {
                         val position = providerPositions[provider.id] ?: 0

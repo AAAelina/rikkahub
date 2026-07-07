@@ -8,6 +8,7 @@ fun computeAIIconByName(name: String): String? {
 
     val lowerName = name.lowercase()
     val result = when {
+        PATTERN_CODEX.containsMatchIn(lowerName) -> "codex.svg"
         PATTERN_OPENAI.containsMatchIn(lowerName) -> "openai.svg"
         PATTERN_GEMINI.containsMatchIn(lowerName) -> "gemini-color.svg"
         PATTERN_GOOGLE.containsMatchIn(lowerName) -> "google-color.svg"
@@ -50,8 +51,6 @@ fun computeAIIconByName(name: String): String? {
         PATTERN_LING.containsMatchIn(lowerName) -> "ling.png"
         PATTERN_MIMO.containsMatchIn(lowerName) -> "xiaomimimo.svg"
         PATTERN_LONGCAT.containsMatchIn(lowerName) -> "longcat-color.svg"
-        PATTERN_ELEVENLABS.containsMatchIn(lowerName) -> "elevenlabs.svg"
-        PATTERN_FISH_AUDIO.containsMatchIn(lowerName) -> "fish-audio.svg"
         PATTERN_RIKKAHUB.containsMatchIn(lowerName) -> "rikkahub.svg"
         PATTERN_SEARCH_LINKUP.containsMatchIn(lowerName) -> "linkup.png"
         PATTERN_SEARCH_BING.containsMatchIn(lowerName) -> "bing.png"
@@ -70,6 +69,7 @@ fun computeAIIconByName(name: String): String? {
 }
 
 private val PATTERN_RIKKAHUB = Regex("rikka|auto")
+private val PATTERN_CODEX = Regex("codex")
 private val PATTERN_OPENAI = Regex("(gpt|openai|o\\d)")
 private val PATTERN_GEMINI = Regex("(gemini|nano-banana)")
 private val PATTERN_GOOGLE = Regex("google")
@@ -112,8 +112,6 @@ private val PATTERN_TOKENPONY = Regex("tokenpony|小马算力")
 private val PATTERN_LING = Regex("ling|ring|百灵")
 private val PATTERN_MIMO = Regex("mimo|xiaomi|小米")
 private val PATTERN_LONGCAT = Regex("longcat")
-private val PATTERN_ELEVENLABS = Regex("elevenlabs")
-private val PATTERN_FISH_AUDIO = Regex("fish.?audio|fishaudio")
 
 private val PATTERN_SEARCH_LINKUP = Regex("linkup")
 private val PATTERN_SEARCH_BING = Regex("bing")

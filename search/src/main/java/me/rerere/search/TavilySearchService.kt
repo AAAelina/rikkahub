@@ -93,7 +93,6 @@ object TavilySearchService : SearchService<SearchServiceOptions.TavilyOptions> {
                 put("search_depth", serviceOptions.depth.ifEmpty { "advanced" })
                 put("topic", topic)
                 put("include_answer", "advanced")
-                put("include_images", true)
             }
             val apiKey = keyRoulette.next(serviceOptions.apiKey, serviceOptions.id.toString())
 
@@ -117,8 +116,7 @@ object TavilySearchService : SearchService<SearchServiceOptions.TavilyOptions> {
                                 url = it.url,
                                 text = it.content
                             )
-                        },
-                        images = response.images,
+                        }
                     ))
             } else {
                 error("response failed #${response.code}")

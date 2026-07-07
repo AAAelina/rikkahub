@@ -158,19 +158,13 @@ private fun SearchPicker(
 ) {
     val navBackStack = LocalNavController.current
 
-    // 模型是否支持内置搜索
-    val supportsBuiltInSearch = model != null &&
-        (ModelRegistry.GEMINI_SERIES.match(model.modelId) || model.modelId.contains("gpt-"))
-    // 模型是否已开启内置搜索（可能是不支持的模型残留的孤儿状态）
-    val hasBuiltInSearchEnabled = model?.tools?.contains(BuiltInTools.Search) == true
-
-    // 模型支持内置搜索，或已开启内置搜索（后者保证残留状态也能被关闭）时显示开关
-    if (model != null && (supportsBuiltInSearch || hasBuiltInSearchEnabled)) {
+    // 模型内置搜索
+    if (model != null && (ModelRegistry.GEMINI_SERIES.match(model.modelId) || model.modelId.contains("gpt-"))) {
         BuiltInSearchSetting(model = model)
     }
 
     // 如果没有开启内置搜索，显示搜索服务选择
-    if (!hasBuiltInSearchEnabled) {
+    if (model?.tools?.contains(BuiltInTools.Search) != true) {
         AppSearchSettings(
             enableSearch = enableSearch,
             onDismiss = onDismiss,
@@ -241,7 +235,7 @@ private fun AppSearchSettings(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        itemsIndexed(settings.searchServices) { index, service ->
+        itemsIndexed(settings.searchServices, key = { _, service -> service.id }) { index, service ->
             val containerColor = animateColorAsState(
                 if (settings.searchServiceSelected == index) {
                     MaterialTheme.colorScheme.primaryContainer

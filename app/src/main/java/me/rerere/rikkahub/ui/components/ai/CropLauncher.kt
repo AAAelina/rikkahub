@@ -20,10 +20,7 @@ import java.io.File
 
 @Composable
 internal fun useCropLauncher(
-    onCroppedImageReady: (Uri) -> Unit,
-    onCleanup: (() -> Unit)? = null,
-    aspectRatio: Pair<Float, Float>? = null,
-    freeStyleCropEnabled: Boolean = true
+    onCroppedImageReady: (Uri) -> Unit, onCleanup: (() -> Unit)? = null
 ): Pair<ActivityResultLauncher<Intent>, (Uri) -> Unit> {
     val context = LocalContext.current
     var cropOutputUri by remember { mutableStateOf<Uri?>(null) }
@@ -45,17 +42,13 @@ internal fun useCropLauncher(
         val outputFile = File(context.appTempFolder, "crop_output_${System.currentTimeMillis()}.jpg")
         cropOutputUri = Uri.fromFile(outputFile)
 
-        var crop = UCrop.of(sourceUri, cropOutputUri!!).withOptions(UCrop.Options().apply {
-            setFreeStyleCropEnabled(freeStyleCropEnabled)
+        val cropIntent = UCrop.of(sourceUri, cropOutputUri!!).withOptions(UCrop.Options().apply {
+            setFreeStyleCropEnabled(true)
             setAllowedGestures(
                 UCropActivity.SCALE, UCropActivity.ROTATE, UCropActivity.NONE
             )
             setCompressionFormat(Bitmap.CompressFormat.PNG)
-        }).withMaxResultSize(4096, 4096)
-        aspectRatio?.let { (x, y) ->
-            crop = crop.withAspectRatio(x, y)
-        }
-        val cropIntent = crop.getIntent(context)
+        }).withMaxResultSize(4096, 4096).getIntent(context)
 
         cropActivityLauncher.launch(cropIntent)
     }

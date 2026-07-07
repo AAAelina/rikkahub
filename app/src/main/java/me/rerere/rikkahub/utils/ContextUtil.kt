@@ -2,7 +2,6 @@ package me.rerere.rikkahub.utils
 
 import android.Manifest
 import android.app.Activity
-import android.app.AppOpsManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.ContextWrapper
@@ -13,9 +12,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
-import android.os.Process
 import android.provider.MediaStore
-import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -68,47 +65,12 @@ fun Context.writeClipboardText(text: String) {
         getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
     runCatching {
         clipboardManager.setPrimaryClip(android.content.ClipData.newPlainText("text", text))
-        Log.i(TAG, "writeClipboardText: $text")
+        // Never log the payload: clipboard writes routinely carry passwords/tokens, and
+        // logcat is readable via adb and bugreports.
+        Log.i(TAG, "writeClipboardText: ${text.length} chars")
     }.onFailure {
-        Log.e(TAG, "writeClipboardText: $text", it)
+        Log.e(TAG, "writeClipboardText failed (${text.length} chars)", it)
         Toast.makeText(this, "Failed to write text into clipboard", Toast.LENGTH_SHORT).show()
-    }
-}
-
-/**
- * Whether the app has been granted the "Usage access" special permission
- * (android.permission.PACKAGE_USAGE_STATS), required to query screen usage time.
- */
-fun Context.hasUsageStatsPermission(): Boolean {
-    val appOps = getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
-    val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        appOps.unsafeCheckOpNoThrow(
-            AppOpsManager.OPSTR_GET_USAGE_STATS,
-            Process.myUid(),
-            packageName
-        )
-    } else {
-        @Suppress("DEPRECATION")
-        appOps.checkOpNoThrow(
-            AppOpsManager.OPSTR_GET_USAGE_STATS,
-            Process.myUid(),
-            packageName
-        )
-    }
-    return mode == AppOpsManager.MODE_ALLOWED
-}
-
-/**
- * Open the system "Usage access" settings page so the user can grant the
- * PACKAGE_USAGE_STATS permission manually.
- */
-fun Context.openUsageAccessSettings() {
-    runCatching {
-        startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        })
-    }.onFailure {
-        Log.e(TAG, "openUsageAccessSettings failed", it)
     }
 }
 
@@ -180,10 +142,10 @@ fun Context.exportImage(
                 put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES)
             }
             val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-            uri?.let {
-                outputStream = contentResolver.openOutputStream(it)
-                bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream!!)
-            }
+                ?: error("MediaStore returned no URI for $fileName")
+            outputStream = contentResolver.openOutputStream(uri)
+                ?: error("Could not open output stream for $fileName")
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
         } else {
             // Android 9及以下直接写入文件
             val imagesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
@@ -192,6 +154,7 @@ fun Context.exportImage(
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
 
             // 通知图库更新
+            @Suppress("DEPRECATION")  // MediaStore is the modern path; this still works for gallery refresh
             val mediaScanIntent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
             mediaScanIntent.data = Uri.fromFile(image)
             sendBroadcast(mediaScanIntent)
@@ -199,6 +162,7 @@ fun Context.exportImage(
         Log.i(TAG, "Image saved successfully: $fileName")
     } catch (e: Exception) {
         Log.e(TAG, "Failed to save image", e)
+        throw e
     } finally {
         outputStream?.close()
     }
@@ -234,10 +198,10 @@ fun Context.exportImageFile(
                 put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES)
             }
             val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-            uri?.let {
-                outputStream = contentResolver.openOutputStream(it)
-                file.inputStream().copyTo(outputStream!!)
-            }
+                ?: error("MediaStore returned no URI for $fileName")
+            outputStream = contentResolver.openOutputStream(uri)
+                ?: error("Could not open output stream for $fileName")
+            file.inputStream().copyTo(outputStream)
         } else {
             // Android 9及以下直接写入文件
             val imagesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
@@ -245,6 +209,7 @@ fun Context.exportImageFile(
             file.copyTo(image, overwrite = true)
 
             // 通知图库更新
+            @Suppress("DEPRECATION")  // MediaStore is the modern path; this still works for gallery refresh
             val mediaScanIntent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
             mediaScanIntent.data = Uri.fromFile(image)
             sendBroadcast(mediaScanIntent)
@@ -252,6 +217,7 @@ fun Context.exportImageFile(
         Log.i(TAG, "Image file saved successfully: $fileName")
     } catch (e: Exception) {
         Log.e(TAG, "Failed to save image file", e)
+        throw e
     } finally {
         outputStream?.close()
     }

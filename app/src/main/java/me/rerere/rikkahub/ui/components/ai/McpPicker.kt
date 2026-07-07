@@ -283,7 +283,7 @@ fun McpPicker(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        items(servers.fastFilter { it.commonOptions.enable }) { server ->
+        items(servers.fastFilter { it.commonOptions.enable }, key = { it.id }) { server ->
             val status by mcpManager.getStatus(server).collectAsStateWithLifecycle(McpStatus.Idle)
             Card {
                 Row(
@@ -306,10 +306,6 @@ fun McpPicker(
                             modifier = Modifier.size(24.dp)
                         )
                         is McpStatus.Error -> Icon(HugeIcons.Alert01, null)
-                        McpStatus.NeedsAuthorization -> Icon(HugeIcons.Alert01, null)
-                        McpStatus.Authorizing -> CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp)
-                        )
                     }
                     Column(
                         modifier = Modifier.weight(1f),
@@ -326,8 +322,6 @@ fun McpPicker(
                                 is McpStatus.Connected -> "Connected"
                                 is McpStatus.Reconnecting -> "Reconnecting (${s.attempt}/${s.maxAttempts})"
                                 is McpStatus.Error -> "Error: ${s.message}"
-                                is McpStatus.NeedsAuthorization -> "Needs authorization"
-                                is McpStatus.Authorizing -> "Authorizing"
                             },
                             style = MaterialTheme.typography.labelSmall,
                             color = LocalContentColor.current.copy(alpha = 0.8f),
@@ -349,7 +343,7 @@ fun McpPicker(
                             if (it) {
                                 val newServers = assistant.mcpServers.toMutableSet()
                                 newServers.add(server.id)
-                                newServers.removeIf { servers.none { s -> s.id == server.id } } // remove invalid servers
+                                newServers.removeIf { id -> servers.none { s -> s.id == id } } // remove invalid servers
                                 onUpdateAssistant(
                                     assistant.copy(
                                         mcpServers = newServers.toSet()
@@ -358,7 +352,7 @@ fun McpPicker(
                             } else {
                                 val newServers = assistant.mcpServers.toMutableSet()
                                 newServers.remove(server.id)
-                                newServers.removeIf { servers.none { s -> s.id == server.id } } //  remove invalid servers
+                                newServers.removeIf { id -> servers.none { s -> s.id == id } } //  remove invalid servers
                                 onUpdateAssistant(
                                     assistant.copy(
                                         mcpServers = newServers.toSet()

@@ -45,14 +45,8 @@ internal object AwsSignatureV4 {
             path
         }.let { if (it.isEmpty()) "/" else it }
 
-        val hostAlreadyContainsBucket = host.startsWith("${config.bucket}.")
-
         val allHeaders = mutableMapOf(
-            "host" to when {
-                config.pathStyle -> host
-                hostAlreadyContainsBucket -> host
-                else -> "${config.bucket}.$host"
-            },
+            "host" to (if (config.pathStyle) host else "${config.bucket}.$host"),
             "x-amz-content-sha256" to resolvedPayloadHash,
             "x-amz-date" to amzDate,
         )
@@ -108,13 +102,7 @@ internal object AwsSignatureV4 {
 
         val url = buildString {
             append(if (config.isHttps) "https://" else "http://")
-            append(
-                when {
-                    config.pathStyle -> host
-                    hostAlreadyContainsBucket -> host
-                    else -> "${config.bucket}.$host"
-                }
-            )
+            append(if (config.pathStyle) host else "${config.bucket}.$host")
             append(canonicalUri)
             if (canonicalQueryString.isNotEmpty()) {
                 append("?$canonicalQueryString")

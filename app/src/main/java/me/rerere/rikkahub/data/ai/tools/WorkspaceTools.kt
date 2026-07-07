@@ -122,7 +122,7 @@ private fun createWriteFileTool(
             required = listOf("path", "text"),
         )
     },
-    needsApproval = { needsApproval("workspace_write_file") || it.pathOutsideWritableRoots("path") },
+    needsApproval = { needsApproval("workspace_write_file") || it.pathOutsideWorkspace("path") },
     execute = {
         val params = it.jsonObject
         val path = params.absolutePath("path")
@@ -165,7 +165,7 @@ private fun createEditFileTool(
             required = listOf("path", "old_text", "new_text"),
         )
     },
-    needsApproval = { needsApproval("workspace_edit_file") || it.pathOutsideWritableRoots("path") },
+    needsApproval = { needsApproval("workspace_edit_file") || it.pathOutsideWorkspace("path") },
     execute = {
         val params = it.jsonObject
         val path = params.absolutePath("path")
@@ -409,19 +409,14 @@ private fun kotlinx.serialization.json.JsonObject.absolutePath(name: String): St
     return path
 }
 
-// 免强制审批的可写安全区: 工作区文件目录, 以及临时目录 /tmp
-private val WRITABLE_ROOT_PREFIXES = listOf("/workspace", "/tmp")
-
-private fun kotlinx.serialization.json.JsonElement.pathOutsideWritableRoots(name: String): Boolean =
+private fun kotlinx.serialization.json.JsonElement.pathOutsideWorkspace(name: String): Boolean =
     runCatching {
-        jsonObject.absolutePath(name).isOutsideWritableRoots()
+        jsonObject.absolutePath(name).isOutsideWorkspace()
     }.getOrDefault(true)
 
-private fun String.isOutsideWritableRoots(): Boolean {
+private fun String.isOutsideWorkspace(): Boolean {
     val normalized = trimEnd('/').ifBlank { "/" }
-    return WRITABLE_ROOT_PREFIXES.none { prefix ->
-        normalized == prefix || normalized.startsWith("$prefix/")
-    }
+    return normalized != "/workspace" && !normalized.startsWith("/workspace/")
 }
 
 private fun String.rootfsName(): String =
