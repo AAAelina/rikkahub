@@ -121,9 +121,6 @@ android {
         disable.add("FullBackupContent")
     }
     tasks.withType<KotlinCompile>().configureEach {
-        compilerOptions.optIn.add("androidx.compose.material3.ExperimentalMaterial3Api")
-        compilerOptions.optIn.add("androidx.compose.material3.ExperimentalMaterial3ExpressiveApi")
-        compilerOptions.optIn.add("androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi")
         compilerOptions.optIn.add("androidx.compose.animation.ExperimentalAnimationApi")
         compilerOptions.optIn.add("androidx.compose.animation.ExperimentalSharedTransitionApi")
         compilerOptions.optIn.add("androidx.compose.foundation.ExperimentalFoundationApi")
@@ -174,15 +171,11 @@ dependencies {
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
-    implementation(libs.androidx.material3)
-    implementation(libs.androidx.material3.adaptive)
-    implementation(libs.androidx.material3.adaptive.layout)
 
     // Navigation 3
     implementation(libs.androidx.navigation3.runtime)
     implementation(libs.androidx.navigation3.ui)
     implementation(libs.androidx.lifecycle.viewmodel.navigation3)
-    implementation(libs.androidx.material3.adaptive.navigation3)
 
 
     // DataStore
@@ -313,7 +306,6 @@ dependencies {
     implementation(project(":search"))
     implementation(project(":speech"))
     implementation(project(":common"))
-    implementation(project(":material3"))
     implementation(project(":workspace"))
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar", "*.aar"))))
     implementation(kotlin("reflect"))
