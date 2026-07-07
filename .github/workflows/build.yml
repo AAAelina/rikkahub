@@ -8,8 +8,8 @@ jobs:
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 17 }
       - uses: android-actions/setup-android@v3
-      - run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null
-      - run: chmod +x gradlew && ./gradlew assembleRelease
+      - run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
+      - run: chmod +x gradlew && ./gradlew assembleRelease -x :web:installWebUiDeps
       - uses: actions/upload-artifact@v4
         with:
           name: rikkahub-custom
