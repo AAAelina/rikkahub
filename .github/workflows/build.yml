@@ -8,10 +8,8 @@ jobs:
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 17 }
       - uses: android-actions/setup-android@v3
-      - run: |
-          chmod +x gradlew
-          rm -f app/google-services.json 2>/dev/null
-          ./gradlew assembleRelease -x :app:processReleaseGoogleServices
+      - run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null
+      - run: chmod +x gradlew && ./gradlew assembleRelease
       - uses: actions/upload-artifact@v4
         with:
           name: rikkahub-custom
