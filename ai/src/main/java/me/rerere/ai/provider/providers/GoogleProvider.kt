@@ -128,7 +128,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             )
             val response = client.newCall(request).await()
             if (response.isSuccessful) {
-                val body = response.body.string()
+                val body = response.body?.string() ?: error("empty body")
                 Log.d(TAG, "listModels: $body")
                 val bodyObject = json.parseToJsonElement(body).jsonObject
                 val models = bodyObject["models"]?.jsonArray ?: return@withContext emptyList()
@@ -185,10 +185,10 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
 
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
-            throw Exception("Failed to get response: ${response.code} ${response.body.string()}")
+            throw Exception("Failed to get response: ${response.code} ${response.body?.string()}")
         }
 
-        val bodyStr = response.body.string()
+        val bodyStr = response.body?.string() ?: ""
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
 
         val candidates = bodyJson["candidates"]!!.jsonArray
@@ -292,7 +292,8 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
 
                     trySend(messageChunk)
                 } catch (e: Exception) {
-                    Log.w(TAG, "onEvent: failed to parse $data", e)
+                    e.printStackTrace()
+                    println("[onEvent] 解析错误: $data")
                 }
             }
 
@@ -303,14 +304,15 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             ) {
                 var exception = t
 
-                Log.w(TAG, "onFailure: ${t?.message}", t)
+                t?.printStackTrace()
+                println("[onFailure] 发生错误: ${t?.message}")
 
                 try {
                     if (t == null && response != null) {
                         val bodyStr = response.body.stringSafe()
                         if (!bodyStr.isNullOrEmpty()) {
                             val bodyElement = json.parseToJsonElement(bodyStr)
-                            Log.d(TAG, "onFailure: error body $bodyElement")
+                            println(bodyElement)
                             if (bodyElement is JsonObject) {
                                 exception = Exception(
                                     bodyElement["error"]?.jsonObject?.get("message")?.jsonPrimitive?.content
@@ -322,7 +324,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                         }
                     }
                 } catch (e: Throwable) {
-                    Log.w(TAG, "onFailure: failed to parse error body", e)
+                    e.printStackTrace()
                     exception = e
                 } finally {
                     close(exception ?: Exception("Stream failed"))
@@ -551,15 +553,11 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         return when {
             jsonObject.containsKey("text") -> {
                 val thought = jsonObject["thought"]?.jsonPrimitive?.booleanOrNull ?: false
-                val thoughtSignature = jsonObject["thoughtSignature"]?.jsonPrimitive?.contentOrNull
                 val text = jsonObject["text"]?.jsonPrimitive?.content ?: ""
                 if (thought) UIMessagePart.Reasoning(
                     reasoning = text,
                     createdAt = Clock.System.now(),
-                    finishedAt = null,
-                    metadata = thoughtSignature?.let {
-                        buildJsonObject { put("thoughtSignature", JsonPrimitive(it)) }
-                    },
+                    finishedAt = null
                 ) else UIMessagePart.Text(text)
             }
 
@@ -619,45 +617,16 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
     private fun JsonArrayBuilder.addModelMessage(message: UIMessage) {
         val groups = groupPartsByToolBoundary(message.parts)
         val partsBuffer = mutableListOf<JsonObject>()
-        // Forward thoughtSignature from any preceding Reasoning part to the next Tool
-        // part that doesn't already carry one. Gemini emits the signature on the thought
-        // (text + thought=true), but Reasoning parts are not sent back to Gemini in
-        // continuation requests — without forwarding, the next functionCall arrives
-        // unsigned and Gemini rejects with "Function call is missing a thought_signature
-        // in functionCall parts". Tracked across the message's parts list so cross-chunk
-        // streaming (thought in chunk N, functionCall in chunk N+1) still attaches the
-        // signature when the assistant message is finally serialized.
-        var carriedSig: String? = null
 
         for (group in groups) {
             when (group) {
                 is PartGroup.Content -> {
-                    // Track most recent reasoning signature for the next tool group.
-                    group.parts.forEach { part ->
-                        if (part is UIMessagePart.Reasoning) {
-                            part.metadata?.get("thoughtSignature")
-                                ?.jsonPrimitive?.contentOrNull
-                                ?.takeIf { it.isNotBlank() }
-                                ?.let { carriedSig = it }
-                        }
-                    }
                     group.parts.mapNotNull { it.toGooglePart() }.forEach { partsBuffer.add(it) }
                 }
 
                 is PartGroup.Tools -> {
                     // 添加 functionCall 到 parts 缓冲
-                    group.tools.forEach { tool ->
-                        val effective = if (
-                            tool.metadata?.get("thoughtSignature")?.jsonPrimitive?.contentOrNull.isNullOrBlank()
-                            && carriedSig != null
-                        ) {
-                            tool.copy(metadata = buildJsonObject {
-                                put("thoughtSignature", JsonPrimitive(carriedSig))
-                            })
-                        } else tool
-                        partsBuffer.add(effective.toFunctionCallPart())
-                    }
-                    carriedSig = null  // consumed by this tool group
+                    group.tools.forEach { partsBuffer.add(it.toFunctionCallPart()) }
 
                     // 输出 model 消息
                     add(buildJsonObject {
@@ -750,17 +719,67 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
     }
 
     private fun UIMessagePart.Tool.toFunctionResponsePart() = buildJsonObject {
-        put("functionResponse", buildJsonObject {
-            put("name", toolName)
-            put("response", buildJsonObject {
-                put(
-                    "result",
-                    output.filterIsInstance<UIMessagePart.Text>()
-                        .joinToString("\n") { it.text }
-                )
+            put("functionResponse", buildJsonObject {
+                put("name", toolName)
+
+                // 1. 拆分出纯文本部分
+                val textParts = output.filterIsInstance<UIMessagePart.Text>()
+                
+                // 2. 提取所有的多模态(图片/视频/音频)，并直接转为 Google 要求的格式
+                // 过滤出最终包含 inlineData 的数据块
+                val mediaGoogleParts = output
+                    .filter { it !is UIMessagePart.Text }
+                    .mapNotNull { it.toGooglePart() }
+                    .filter { it.containsKey("inlineData") } 
+
+                // 3. 构建给模型看的结构化 response 节点
+                put("response", buildJsonObject {
+                    // 处理文本结果
+                    if (textParts.isNotEmpty()) {
+                        put(
+                            "result", 
+                            textParts.joinToString("\n") { it.text }
+                        )
+                    } else if (mediaGoogleParts.isEmpty()) {
+                        // 如果工具啥都没返回，给个兜底成功状态
+                        put("result", " ")
+                    }
+
+                    // 处理媒体数据（图片、音频、视频），打上 $ref 标签
+                    mediaGoogleParts.forEachIndexed { index, _ ->
+                        val refName = "media_ref_$index"
+                        put(refName, buildJsonObject {
+                            put("\$ref", refName)
+                        })
+                    }
+                })
+
+                // 4. 将真实的 Base64 多媒体数据挂载到 parts 中，并建立指针绑定
+                if (mediaGoogleParts.isNotEmpty()) {
+                    putJsonArray("parts") {
+                        mediaGoogleParts.forEachIndexed { index, googlePart ->
+                            val refName = "media_ref_$index"
+                            val inlineData = googlePart["inlineData"]!!.jsonObject
+
+                            add(buildJsonObject {
+                                // 重新组装 inlineData，并在内部注入 displayName
+                                put("inlineData", buildJsonObject {
+                                    // 复制原有的 mimeType 和 data
+                                    inlineData.forEach { (k, v) -> put(k, v) }
+                                    // 添加能够让 $ref 认出它的唯一名称
+                                    put("displayName", refName)
+                                })
+                                
+                                // 保留可能存在的其他字段
+                                googlePart.forEach { (k, v) ->
+                                    if (k != "inlineData") put(k, v)
+                                }
+                            })
+                        }
+                    }
+                }
             })
-        })
-    }
+        }
 
     private fun parseUsageMeta(jsonObject: JsonObject?): TokenUsage? {
         if (jsonObject == null) {
@@ -851,8 +870,6 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 }
             }
         }
-
-        if (items.isEmpty()) error("No images in response (the model may have refused the prompt).")
 
         items.forEach { item ->
             emit(item)
